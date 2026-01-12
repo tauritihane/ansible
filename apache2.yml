@@ -1,0 +1,196 @@
+---
+- hosts: webservers
+  become: yes
+  tasks:
+    # 1. Installimine Debianis
+    - name: install apache2 on Debian
+      apt:
+        name: apache2
+        update_cache: yes
+        state: latest
+      when: ansible_os_family == "Debian"
+
+    # 2. Installimine CentOS-is
+    - name: install httpd on CentOS
+      dnf:
+        name: httpd
+        state: latest
+      when: ansible_os_family == "RedHat"
+
+    # 3. Teenuse käivitamine (mõlemas süsteemis korraga)
+    - name: Veendu, et Apache töötab
+      service:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: started
+        enabled: yes
+
+    # 4. CentOS-is tulemüüri avamine
+    - name: Ava tulemüür CentOS-is
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+        immediate: yes
+      when: ansible_os_family == "RedHat"
+
+    # 5. Public_html
+    - name: Loome public_html kataloog user_ile
+      file:
+        path: /home/user/public_html
+        state: directory
+        owner: user
+        group: user
+        mode: '0755'
+
+    # 6. userdir_mod lubamine
+    - name: Lubame userdir mod (Debian)
+      apache2_module:
+        name: userdir
+        state: present
+      when: ansible_os_family == "Debian"
+
+    #7.
+    - name: Lubame userdir konfiguratsioon (CentOS)
+      lineinfile:
+        path: /etc/httpd/conf.d/userdir.conf
+        regexp: '^\s*UserDir disabled'
+        line: '    #UserDir disabled'
+      when: ansible_os_family == "RedHat"
+
+    #8. 
+    - name: Aktiveerime public_html (CentOS)
+      lineinfile:
+        path: /etc/httpd/conf.d/userdir.conf
+        regexp: '^\s*#UserDir public_html'
+        line: '    UserDir public_html'
+      when: ansible_os_family == "RedHat"
+
+    #
+    - name: Kopeerime lõpliku index.html faili
+      copy:
+        content: "<html><body><h1>USERi lehekylg</h1></body></html>"
+        dest: /home/user/public_html/index.html
+        owner: user
+        group: user
+        mode: '0644'
+
+    - name: Muudame kodukataloogi õigusi, et Apache pääseks ligi
+      file:
+        path: /home/user
+        mode: '0755'
+
+    - name: Lubame SELinuxis Apachel lugeda kodukatalooge (ainult CentOS)
+      seboolean:
+        name: httpd_enable_homedirs
+        state: yes
+        persistent: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Kopeerime süsteemi tervituslehe ja muudame selle sisu
+      shell: |
+        cat /var/www/html/index.html | sed 's/Apache2 Debian Default Page/USER_i lehekylg/' > /home/user/public_html/index.html
+        chown user:user /home/user/public_html/index.html
+
+    #
+    - name: Loome Debian-stiilis tervituslehe Apache logoga
+      copy:
+        dest: /home/user/public_html/index.html
+        owner: user
+        group: user
+        mode: '0644'
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Kasutaja leht</title>
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; padding: 50px; }
+              .container { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display: inline-block; }
+              img { width: 200px; margin-bottom: 20px; }
+              h1 { color: #D22128; } /* Apache punane */
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <img src="https://www.apache.org/img/asf_logo.png" alt="Apache Logo">
+              <h1>Tere tulemast!</h1>
+              <p>Oled jõudnud kasutaja <strong>"user"</strong> veebilehele.</p>
+              <p>See server töötab Debiani operatsioonisüsteemil.</p>
+            </div>
+          </body>
+          </html>
+      when: ansible_os_family == "Debian"
+
+    - name: Loome CentOS-stiilis index.html faili
+      copy:
+        dest: /home/user/public_html/index.html
+        owner: user
+        group: user
+        mode: '0644'
+        content: |
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <title>USER_i lehekülg</title>
+            <style>
+              body { margin: 0; padding: 0; font-family: 'Open Sans', sans-serif; background: #0b0b2e; color: white; text-align: center; }
+              .header-section { padding: 80px 10% 20px 10%; }
+              .centos-logo { width: 120px; margin-bottom: 20px; }
+              .content-card { background: white; color: #333; margin: 20px 10%; padding: 40px; border-radius: 8px; }
+            </style>
+          </head>
+          <body>
+            <div class="header-section">
+              <img src="https://www.centos.org/assets/img/centos-logo.png" class="centos-logo" alt="CentOS Logo">
+              <h1>Oled jõudnud kasutaja "user" lehele!</h1>
+            </div>
+            <div class="content-card">
+              <h2>CentOS Testleht</h2>
+              <p>See leht kinnitab, et HTTP server töötab korrektselt.</p>
+            </div>
+          </body>
+          </html>
+      when: ansible_os_family == "RedHat"
+
+- name: Osa 2 - Unikaalne ja disainitud tervitusleht
+  hosts: all
+  become: yes
+  tasks:
+    - name: Loo unikaalne index.html fail /var/www/html/ kataloogi
+      copy:
+        dest: /var/www/html/index.html
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          <!DOCTYPE html>
+          <html lang="et">
+          <head>
+              <meta charset="UTF-8">
+              <title>Serveri tervitus - {{ ansible_hostname }}</title>
+              <style>
+                  body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f4f8; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                  .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; border-top: 8px solid #D22128; }
+                  img { width: 280px; margin-bottom: 20px; }
+                  h1 { color: #333; margin-bottom: 10px; }
+                  .info { font-size: 1.2rem; color: #555; margin: 10px 0; }
+                  .highlight { font-weight: bold; color: #D22128; }
+                  .footer { margin-top: 25px; font-size: 0.8rem; color: #aaa; border-top: 1px solid #eee; padding-top: 10px; }
+              </style>
+          </head>
+          <body>
+              <div class="card">
+                  <img src="https://www.apache.org/img/asf_logo.png" alt="Apache Logo">
+                  <h1>Tere tulemast!</h1>
+                  <p class="info">Oled jõudnud serverisse nimega: <span class="highlight">{{ ansible_hostname }}</span></p>
+                  <p class="info">Selle serveri IP-aadress on: <span class="highlight">{{ ansible_default_ipv4.address }}</span></p>
+                  <div class="footer">Genereeritud automaatselt Ansible abil ({{ ansible_date_time.date }})</div>
+              </div>
+          </body>
+          </html>
+
+    - name: Taaskäivita Apache teenus
+      service:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: restarted
