@@ -1,0 +1,38 @@
+---
+- hosts: webservers
+  become: yes
+  tasks:
+    - name: Eemaldame PHP (Debian/Ubuntu)
+      apt:
+        name: php
+        state: absent
+        purge: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Eemaldame PHP (CentOS/RHEL)
+      yum:
+        name: "php*"
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: Eemaldame üleliigsed sõltuvused (ainult Debian)
+      apt:
+        autoremove: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Kustutame testfaili phpinfo.php
+      file:
+        path: /var/www/html/phpinfo.php
+        state: absent
+
+    - name: Taaskäivitame Apache (Debian)
+      service:
+        name: apache2
+        state: restarted
+      when: ansible_os_family == "Debian"
+
+    - name: Taaskäivitame Apache (CentOS)
+      service:
+        name: httpd
+        state: restarted
+      when: ansible_os_family == "RedHat"
