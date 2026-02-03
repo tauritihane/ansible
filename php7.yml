@@ -1,0 +1,27 @@
+---
+- hosts: webservers
+  become: yes
+  tasks:
+    - name: Paigaldame PHP
+      package:
+        name: php
+        state: latest
+
+    - name: Paigaldame Apache
+      package:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: latest
+
+    - name: Loo automaatne phpinfo.php fail
+      copy:
+        dest: /var/www/html/phpinfo.php
+        content: |
+          <?php
+          phpinfo();
+          ?>
+
+    - name: Veendu, et Apache teenus jookseb ja on lubatud
+      service:
+        name: "{{ 'apache2' if ansible_os_family == 'Debian' else 'httpd' }}"
+        state: started
+        enabled: yes
