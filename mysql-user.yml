@@ -1,0 +1,47 @@
+---
+- hosts: webservers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    # 1. SAMM: Paigalda vajalikud teegid, et Ansible saaks MySQL-iga suhelda
+    - name: (Debian) Paigalda Pythoni MySQL teegid
+      apt:
+        name: python3-pymysql
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: (CentOS) Paigalda pip3 ja PyMySQL
+      dnf:
+        name: 
+          - python3-pip
+          - python3-pymysql
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    # 2. SAMM: Seadista MySQL root parooliks 'qwerty'
+    - name: Seadista MySQL root parool
+      shell: |
+        mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'qwerty'; FLUSH PRIVILEGES;"
+      ignore_errors: yes
+
+    # 3. SAMM: EEMALDA automaatne sisselogimine (See tagab, et 'mysql' käsk annab errori)
+    - name: Kustuta .my.cnf failid, et süsteem nõuaks käsitsi parooli
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/.my.cnf
+        - /home/user/.my.cnf
+
+    # 4. SAMM: Kontroll, mis peabki ebaõnnestuma (et näha seda Ansible logis)
+    - name: Kontrolli paroolita sisselogimise ebaõnnestumist
+      command: mysql -u root -e "status"
+      register: mysql_test
+      ignore_errors: yes
+
+    - name: Kuva tulemus (Siin peaks olema Access Denied)
+      debug:
+        msg: "Tulemus: {{ mysql_test.stderr }}"
